@@ -1,0 +1,38 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+
+const PROMPT = `Tu es un expert en politique française. Génère une liste JSON des candidats probables à l'élection présidentielle française de 2027.
+
+Pour chaque candidat, fournis :
+- id : identifiant court (slug, ex: "marine-le-pen")
+- name : nom complet
+- party : nom du parti
+- imageUrl : URL Wikipedia de la photo (format: https://upload.wikimedia.org/wikipedia/commons/...)
+- participationOdds : cote de participation (nombre décimal)
+- pollEstimate : estimation du score au 1er tour en %
+- politicalSpectrum : position de -10 (extrême gauche) à +10 (extrême droite)
+
+Inclus au moins 10 candidats. Réponds UNIQUEMENT avec un tableau JSON valide, sans markdown.`;
+
+async function fetchCandidates() {
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const result = await model.generateContent(PROMPT);
+  const text = result.response.text().trim();
+  const clean = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+  const data = JSON.parse(clean);
+  if (!Array.isArray(data)) throw new Error('Format invalide');
+  return data;
+}
+
+export async function fetchCandidatesWithRetry(retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetchCandidates();
+    } catch (e) {
+      if (i === retries - 1) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error('Impossible de charger les candidats.');
+}
